@@ -1,0 +1,342 @@
+rules:
+  - id: CSN730802_8_15_4_A
+    title: Střešní plášť jako požárně otevřená plocha
+    type: default_rule
+    condition: "Pokud není splněna některá výjimka podle čl. 8.15.4 b)."
+    result:
+      roof_is_fire_open: true
+      distance_required: true
+      pv_default_kg_m2: 30
+      include_roof_openings: true
+    source:
+      standard: "ČSN 73 0802 ed. 2"
+      article: "8.15.4 a)"
+
+  - id: CSN730802_8_15_4_B1
+    title: Střešní plášť není požárně otevřenou plochou – I. a II. SPB
+    type: exception_rule
+    required_inputs:
+      - pv_kg_m2
+      - fire_safety_level
+      - roof_requirement_status
+    condition:
+      all:
+        - "pv_kg_m2 <= 50"
+        - "fire_safety_level in ['I', 'II']"
+        - "roof_requirement_status in ['splňuje 8.15.1 a)', 'požadavky 8.15.1 c) jsou nulové']"
+    result:
+      roof_is_fire_open: false
+      distance_required: false
+    output_text: >
+      Střešní plášť se podle čl. 8.15.4 bod b) 1)
+      ČSN 73 0802 ed. 2 nepovažuje za požárně otevřenou plochu.
+      Normová podmínka je splněna, protože pv ≤ 50 kg/m²
+      a objekt je zařazen do I. nebo II. stupně požární bezpečnosti.
+    source:
+      standard: "ČSN 73 0802 ed. 2"
+      article: "8.15.4 b) 1)"
+
+  - id: CSN730802_8_15_4_B2
+    title: Střešní plášť Broof(t3) nad požárním stropem
+    type: exception_rule
+    required_inputs:
+      - roof_classification
+      - roof_structure_above_fire_ceiling
+      - fire_resistance_required
+    condition:
+      all:
+        - "roof_classification == 'Broof(t3)'"
+        - "roof_structure_above_fire_ceiling == true"
+        - "fire_resistance_required == false"
+    result:
+      roof_is_fire_open: false
+      distance_required: false
+    output_text: >
+      Střešní plášť se podle čl. 8.15.4 bod b) 2)
+      ČSN 73 0802 ed. 2 nepovažuje za požárně otevřenou plochu.
+      Normová podmínka je splněna, protože střešní plášť vykazuje
+      klasifikaci Broof(t3) a konstrukce krovu je umístěna nad požárním stropem.
+    source:
+      standard: "ČSN 73 0802 ed. 2"
+      article: "8.15.4 b) 2)"
+
+  - id: CSN730802_8_15_4_B3
+    title: Střešní plášť s požadovanou požární odolností
+    type: exception_rule
+    required_inputs:
+      - fire_resistance_required
+      - fire_resistance_met
+      - fire_safety_level
+    condition:
+      all:
+        - "fire_resistance_required == true"
+        - "fire_resistance_met == true"
+        - "fire_safety_level in ['III', 'IV', 'V', 'VI', 'VII']"
+    result:
+      roof_is_fire_open: false
+      distance_required: false
+    output_text: >
+      Střešní plášť se podle čl. 8.15.4 bod b) 3)
+      ČSN 73 0802 ed. 2 nepovažuje za požárně otevřenou plochu.
+      Normová podmínka je splněna, protože střešní plášť ohraničující
+      požární úsek s požárním rizikem vykazuje požadovanou požární odolnost.
+    source:
+      standard: "ČSN 73 0802 ed. 2"
+      article: "8.15.4 b) 3)"
+
+  - id: CSN730802_8_15_4_B4
+    title: Střešní plášť bez požadované požární odolnosti při c <= 0,4
+    type: exception_rule
+    required_inputs:
+      - fire_resistance_required
+      - fire_resistance_met
+      - coefficient_c
+    condition:
+      all:
+        - "fire_resistance_required == true"
+        - "fire_resistance_met == false"
+        - "coefficient_c <= 0.4"
+    result:
+      roof_is_fire_open: false
+      distance_required: false
+    output_text: >
+      Střešní plášť se podle čl. 8.15.4 bod b) 4)
+      ČSN 73 0802 ed. 2 nepovažuje za požárně otevřenou plochu.
+      Normová podmínka je splněna, protože v požárním úseku
+      je součinitel c ≤ 0,4.
+    source:
+      standard: "ČSN 73 0802 ed. 2"
+      article: "8.15.4 b) 4)"
+
+  - id: CSN730802_8_15_4_B5
+    title: Střešní plášť na konstrukci DP1 s omezeným uvolněným teplem
+    type: exception_rule
+    required_inputs:
+      - supporting_construction_type
+      - required_fire_resistance_met
+      - released_heat_mj_m2
+      - heat_release_rate_mw_m2
+      - average_distance_to_dp1_m
+    condition:
+      any:
+        - all:
+            - "supporting_construction_type == 'DP1'"
+            - "required_fire_resistance_met == true"
+            - "released_heat_mj_m2 <= 150"
+            - "average_distance_to_dp1_m <= 0.5"
+        - all:
+            - "supporting_construction_type == 'DP1'"
+            - "required_fire_resistance_met == true"
+            - "heat_release_rate_mw_m2 < 0.4"
+            - "average_distance_to_dp1_m <= 0.5"
+    result:
+      roof_is_fire_open: false
+      distance_required: false
+    output_text: >
+      Střešní plášť se podle čl. 8.15.4 bod b) 5)
+      ČSN 73 0802 ed. 2 nepovažuje za požárně otevřenou plochu.
+      Normová podmínka je splněna, protože střešní plášť je uložen
+      na konstrukci DP1 s požárně dělící funkcí a je splněn požadavek
+      na omezené uvolněné teplo nebo tepelný výkon.
+    source:
+      standard: "ČSN 73 0802 ed. 2"
+      article: "8.15.4 b) 5)"
+
+  - id: CSN730802_8_15_4_B6
+    title: Hustota tepelného toku z hořící střechy je nižší než 18,5 kW/m2
+    type: exception_rule
+    required_inputs:
+      - roof_edge_heat_flux_kw_m2
+    condition:
+      all:
+        - "roof_edge_heat_flux_kw_m2 < 18.5"
+    result:
+      roof_is_fire_open: false
+      distance_required: false
+    output_text: >
+      Střešní plášť se podle čl. 8.15.4 bod b) 6)
+      ČSN 73 0802 ed. 2 nepovažuje za požárně otevřenou plochu.
+      Normová podmínka je splněna, protože hustota tepelného toku
+      z hořící střechy je ve svislé rovině v okraji římsy
+      menší než 18,5 kW/m².
+    source:
+      standard: "ČSN 73 0802 ed. 2"
+      article: "8.15.4 b) 6)"
+
+  - id: CSN730810_3_1_3_ETICS_THICKNESS
+    title: Posouzení tloušťky vnějšího zateplení
+    type: decision_rule
+    required_inputs:
+      - insulation_thickness_mm
+      - insulation_reaction_class
+    condition:
+      all:
+        - "insulation_thickness_mm <= 200"
+    result:
+      released_heat_assessment_required: false
+      affects_fire_open_area: false
+    output_text: >
+      Tloušťka tepelné izolace nepřesahuje 200 mm
+      a zateplovací systém se nezapočítává do posouzení
+      odstupových vzdáleností.
+    source:
+      standard: "ČSN 73 0810"
+      article: "3.1.3"
+
+  - id: CSN730810_3_1_3_ETICS_OVER_200
+    title: Posouzení zateplení při tloušťce větší než 200 mm
+    type: decision_rule
+    required_inputs:
+      - insulation_thickness_mm
+      - insulation_reaction_class
+      - released_heat_mj_m2
+    condition:
+      all:
+        - "insulation_thickness_mm > 200"
+        - "insulation_reaction_class not in ['A1', 'A2']"
+    result:
+      released_heat_assessment_required: true
+      affects_fire_open_area: true
+    output_text: >
+      Tloušťka tepelné izolace přesahuje 200 mm.
+      V návaznosti na požární otevřenost ploch je nutné
+      zhodnotit množství uvolněného tepla z 1 m² plochy zateplení.
+    source:
+      standard: "ČSN 73 0810"
+      article: "3.1.3"
+
+  - id: CSN730810_3_1_3_ETICS_A1_A2
+    title: Nehořlavé vnější zateplení A1/A2
+    type: decision_rule
+    required_inputs:
+      - insulation_reaction_class
+    condition:
+      all:
+        - "insulation_reaction_class in ['A1', 'A2']"
+    result:
+      released_heat_assessment_required: false
+      affects_fire_open_area: false
+    output_text: >
+      Vnější zateplovací systém je proveden z materiálů třídy reakce
+      na oheň A1 nebo A2. Zateplení neovlivňuje posouzení
+      požární bezpečnosti z hlediska odstupových vzdáleností.
+    source:
+      standard: "ČSN 73 0810"
+      article: "3.1.3"
+
+  - id: CSN730802_OPENINGS_V1
+    title: Okna a dveře jako zcela požárně otevřené plochy
+    type: project_assumption
+    condition: "Pro verzi V1 se všechny posuzované otvory uvažují jako zcela požárně otevřené plochy."
+    result:
+      opening_type: "zcela požárně otevřená plocha"
+      po_percent: 100
+      partial_opening_assessment_enabled: false
+    output_text: >
+      Okna a dveře objektu jsou uvažovány jako zcela požárně
+      otevřené plochy.
+    source:
+      standard: "ČSN 73 0802 ed. 2"
+      article: "10.4.4 a)"
+
+  - id: CSN730802_PV_ADJUSTMENT
+    title: Úprava výpočtového požárního zatížení podle konstrukčního systému
+    type: calculation_rule
+    required_inputs:
+      - pv_base_kg_m2
+      - structural_system_type
+    calculation:
+      nehorlavy: "pv_adjusted = pv_base_kg_m2"
+      smiseny: "pv_adjusted = pv_base_kg_m2 + 5"
+      horlavy_D2: "pv_adjusted = pv_base_kg_m2 + 10"
+      horlavy_D3: "pv_adjusted = pv_base_kg_m2 + 15"
+    source:
+      standard: "ČSN 73 0802 ed. 2"
+      article: "10.4.4 a)"
+
+  - id: CSN730802_HEAT_FLUX_METHOD_V1
+    title: Výpočet odstupové vzdálenosti podle hustoty tepelného toku
+    type: calculation_method
+    required_inputs:
+      - opening_width_m
+      - opening_height_m
+      - pv_adjusted_kg_m2
+      - phi_model_or_table
+    assumptions:
+      opening_type: "zcela požárně otevřená plocha"
+      epsilon: 1.0
+      critical_heat_flux_kw_m2: 18.5
+    steps:
+      - "Vypočti TN = 20 + 345 * log10(8 * pv_adjusted + 1)."
+      - "Vypočti I = epsilon * (TN + 273)^4 * 5.67e-11."
+      - "Vypočti požadovaný polohový faktor phi = 18.5 / I."
+      - "Stanov odstupovou vzdálenost d z geometrického vztahu nebo tabulky phi(d,b,h)."
+    limitation: >
+      Pokud znalostní soubor neobsahuje vztah, tabulku nebo algoritmus
+      pro výpočet phi(d,b,h), chatbot nesmí dopočítat odstupovou
+      vzdálenost d.
+    source:
+      standard: "ČSN 73 0802 ed. 2"
+      article: "10.4.4"
+
+  - id: CSN730802_10_4_6_FALLING_PARTS
+    title: Zvětšení odstupové vzdálenosti při nebezpečí padání hořících částí
+    type: comparison_rule
+    required_inputs:
+      - base_distance_m
+      - fall_height_m
+      - falling_burning_parts_risk
+    condition:
+      all:
+        - "falling_burning_parts_risk == true"
+    calculation:
+      falling_distance_m: "0.36 * fall_height_m"
+      final_distance_m: "max(base_distance_m, falling_distance_m)"
+    source:
+      standard: "ČSN 73 0802 ed. 2"
+      article: "10.4.6"
+
+  - id: CSN730802_10_4_7_FALLING_PARTS_EXCEPTIONS
+    title: Kdy se neprovádí posouzení padání částí
+    type: exception_rule
+    conditions_any:
+      - "Obvodové a střešní pláště jsou DP1."
+      - "Obvodové a střešní pláště jsou DP2 a je prokázáno, že padající části nemohou šířit požár."
+      - "Jde o odstupové vzdálenosti mezi požárními úseky téhož objektu."
+    result:
+      falling_parts_assessment_required: false
+    source:
+      standard: "ČSN 73 0802 ed. 2"
+      article: "10.4.7"
+
+  - id: CSN730802_10_4_8_1_GROUP_OPENINGS
+    title: Posouzení skupiny otvorů a možnost samostatného posouzení jednotlivých POP
+    type: decision_rule
+    required_inputs:
+      - opening_area_total_m2
+      - bounding_rectangle_area_m2
+      - p0_percent
+    calculation:
+      p0_percent: "opening_area_total_m2 / bounding_rectangle_area_m2 * 100"
+    condition:
+      if_p0_gte_40:
+        condition: "p0_percent >= 40"
+        result: "Skupina otvorů se posuzuje jako jedna požárně otevřená plocha s hodnotou p0_percent."
+      if_p0_lt_40:
+        condition: "p0_percent < 40"
+        result: "Chatbot se zeptá uživatele, zda chce ověřit možnost samostatného posouzení jednotlivých otvorů."
+    user_prompt: >
+      Procento požárně otevřené plochy p₀ je menší než 40 %.
+      Chcete ověřit možnost samostatného posouzení jednotlivých otvorů
+      podle čl. 10.4.8.1 ČSN 73 0802?
+    verification_rule:
+      required_inputs:
+        - distance_between_opening_edges_m
+        - distance_opening_1_m
+        - distance_opening_2_m
+      condition: "distance_between_opening_edges_m > 0.6 * (distance_opening_1_m + distance_opening_2_m)"
+      result_if_true: "Jednotlivé požárně otevřené plochy lze posuzovat samostatně."
+      result_if_false: "Jednotlivé požárně otevřené plochy nelze posuzovat samostatně; skupina se posuzuje jako jeden obalový otvor."
+    source:
+      standard: "ČSN 73 0802 ed. 2"
+      article: "10.4.8.1"

@@ -1,0 +1,235 @@
+formulas:
+
+  - id: FORMULA_CSN730802_10_4_4_TN
+    title: Teplota plynů v hořícím prostoru
+
+    formula: "TN = 20 + 345 * log10(8 * pv + 1)"
+
+    variables:
+      TN:
+        unit: "°C"
+        description: "Teplota plynů v hořícím prostoru."
+
+      pv:
+        unit: "kg/m2"
+        description: "Výpočtové požární zatížení po úpravě dle konstrukčního systému."
+
+    source:
+      standard: "ČSN 73 0802 ed. 2"
+      article: "10.4.4"
+
+  - id: FORMULA_CSN730802_10_4_4_I
+    title: Zdrojová hustota tepelného toku
+
+    formula: "I = epsilon * (TN + 273)^4 * 5.67e-11"
+
+    variables:
+      I:
+        unit: "kW/m2"
+        description: "Zdrojová hustota tepelného toku při 100 % sálání."
+
+      epsilon:
+        unit: "-"
+        default: 1.0
+        description: "Celková emisivita."
+
+      TN:
+        unit: "°C"
+        description: "Teplota plynů v hořícím prostoru."
+
+    source:
+      standard: "ČSN 73 0802 ed. 2"
+      article: "10.4.4"
+
+  - id: FORMULA_EFFECTIVE_HEAT_FLUX
+    title: Efektivní hustota tepelného toku při procentu sálání
+
+    formula: "I_eff = I * (p0 / 100)"
+
+    variables:
+      I_eff:
+        unit: "kW/m2"
+        description: "Efektivní hustota tepelného toku po zohlednění procenta sálání."
+
+      I:
+        unit: "kW/m2"
+        description: "Zdrojová hustota tepelného toku při 100 % sálání."
+
+      p0:
+        unit: "%"
+        default: 100
+        description: "Procento požárně otevřené / sálající plochy."
+
+    calculation_note: >
+      Pokud je posuzována jednotlivá požárně otevřená plocha,
+      uvažuje se p0 = 100 %.
+
+      Pokud je posuzována skupina otvorů,
+      použije se procento požárně otevřené plochy
+      obalového obdélníku skupiny otvorů.
+
+      Se snižujícím se p0 se snižuje I_eff
+      a výsledná odstupová vzdálenost má obecně klesat.
+
+    source:
+      standard: "ČSN 73 0802 ed. 2"
+      article: "10.4.4"
+
+  - id: FORMULA_REQUIRED_PHI
+    title: Požadovaný polohový faktor
+
+    formula: "phi = 18.5 / I_eff"
+
+    variables:
+      phi:
+        unit: "-"
+        description: "Požadovaný polohový faktor."
+
+      I_eff:
+        unit: "kW/m2"
+        description: "Efektivní hustota tepelného toku po zohlednění procenta sálání."
+
+    constants:
+      critical_heat_flux:
+        value: 18.5
+        unit: "kW/m2"
+        description: "Kritická hustota tepelného toku."
+
+    calculation_note: >
+      Požadovaný polohový faktor se stanoví
+      z efektivní hustoty tepelného toku I_eff.
+
+      Pokud se snižuje p0,
+      musí se snižovat I_eff
+      a výsledná odstupová vzdálenost má obecně klesat.
+
+    source:
+      standard: "ČSN 73 0802 ed. 2"
+      article: "10.4.4"
+
+  - id: FORMULA_POSITION_FACTOR_RECTANGLE
+    title: Polohový faktor obdélníkové požárně otevřené plochy
+
+    formula: >
+      phi = (2 / pi) * (
+        B / sqrt(1 + B^2) * atan(H / sqrt(1 + B^2))
+        +
+        H / sqrt(1 + H^2) * atan(B / sqrt(1 + H^2))
+      )
+
+    substitutions:
+      B: "b / (2 * d)"
+      H: "h / (2 * d)"
+
+    variables:
+      phi:
+        unit: "-"
+        description: "Polohový faktor."
+
+      b:
+        unit: "m"
+        description: >
+          Šířka požárně otevřené plochy
+          nebo obalového obdélníku skupiny otvorů.
+
+      h:
+        unit: "m"
+        description: >
+          Výška požárně otevřené plochy
+          nebo obalového obdélníku skupiny otvorů.
+
+      d:
+        unit: "m"
+        description: "Odstupová vzdálenost."
+
+    calculation_note: >
+      Odstupová vzdálenost d se stanoví iterací tak,
+      aby platilo:
+
+      phi(d,b,h) = 18.5 / I_eff
+
+      U skupiny otvorů se pro b a h použije
+      obalový rozměr skupiny otvorů.
+
+  - id: FORMULA_OPENING_PERCENTAGE
+    title: Procento požárně otevřené plochy skupiny otvorů
+
+    formula: "p0 = (opening_area_total / bounding_area) * 100"
+
+    variables:
+      p0:
+        unit: "%"
+        description: "Procento požárně otevřené plochy skupiny otvorů."
+
+      opening_area_total:
+        unit: "m2"
+        description: "Součet ploch jednotlivých otvorů."
+
+      bounding_area:
+        unit: "m2"
+        description: "Plocha obalového obdélníku skupiny otvorů."
+
+    calculation_note: >
+      Pokud p0 >= 40 %,
+      lze skupinu otvorů posuzovat
+      jako jednu požárně otevřenou plochu.
+
+      Pokud p0 < 40 %,
+      chatbot se musí zeptat,
+      zda chce uživatel ověřit možnost
+      samostatného posouzení jednotlivých otvorů
+      podle čl. 10.4.8.1 ČSN 73 0802 ed. 2.
+
+    source:
+      standard: "ČSN 73 0802 ed. 2"
+      article: "10.4.8.1"
+
+  - id: FORMULA_CSN730802_10_4_8_1_SPACING
+    title: Ověření vzdálenosti mezi samostatně posuzovanými otvory
+
+    formula: "gap > 0.6 * (d1 + d2)"
+
+    variables:
+      gap:
+        unit: "m"
+        description: >
+          Vzdálenost mezi okraji dvou sousedních
+          požárně otevřených ploch.
+
+      d1:
+        unit: "m"
+        description: "Odstupová vzdálenost prvního otvoru."
+
+      d2:
+        unit: "m"
+        description: "Odstupová vzdálenost druhého otvoru."
+
+    calculation_note: >
+      Tato kontrola se u skupiny otvorů s p0 < 40 %
+      neprovádí automaticky.
+
+      Chatbot se musí nejprve zeptat uživatele,
+      zda chce ověřit možnost samostatného posouzení
+      jednotlivých otvorů.
+
+    source:
+      standard: "ČSN 73 0802 ed. 2"
+      article: "10.4.8.1"
+
+  - id: FORMULA_CSN730802_10_4_6_FALLING_PARTS
+    title: Odstup při padání hořících částí
+
+    formula: "d_fall = 0.36 * h_fall"
+
+    variables:
+      d_fall:
+        unit: "m"
+        description: "Odstupová vzdálenost z hlediska dopadu hořících částí."
+
+      h_fall:
+        unit: "m"
+        description: "Výška pádu hořlavé části konstrukce."
+
+    source:
+      standard: "ČSN 73 0802 ed. 2"
+      article: "10.4.6"
