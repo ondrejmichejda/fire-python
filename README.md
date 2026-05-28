@@ -20,6 +20,14 @@ python3 app.py --host 127.0.0.1 --port 8000
 
 API poběží na `http://127.0.0.1:8000`.
 
+Na Renderu lze aplikaci spustit přímo příkazem:
+
+```bash
+python app.py
+```
+
+Pokud je v prostředí dostupný `PORT`, aplikace se sama přepne na `0.0.0.0:$PORT`.
+
 Na macOS lze pro ne-IT uživatele spustit API dvojklikem na [start_api.command](/Users/ondra/source/fire-python/start_api.command:1). Otevře se Terminál, server poběží po celou dobu otevřeného okna a zavřením okna se API ukončí.
 
 ## Endpointy
@@ -89,3 +97,16 @@ curl -s http://127.0.0.1:8000/v1/opening-distance \
 ```bash
 python3 -m unittest discover -s tests -v
 ```
+
+## Deploy na Render
+
+Pro ruční založení `Web Service` vyplň:
+
+- `Language`: `Python 3`
+- `Branch`: `main`
+- `Region`: podle potřeby, pro ČR klidně `Frankfurt (EU Central)`
+- `Root Directory`: nechat prázdné
+- `Build Command`: `pip install -r requirements.txt`
+- `Start Command`: `python app.py`
+
+Alternativně může Render použít blueprint z `render.yaml`.
