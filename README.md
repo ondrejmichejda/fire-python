@@ -5,6 +5,7 @@ Lokální HTTP API pro deterministické výpočty odstupových vzdáleností. V�
 ## Co API umí
 
 - výpočet odstupové vzdálenosti pro jedno okno nebo dveře,
+- výpočet obalového obdélníku skupiny otvorů a automatický výpočet `p0`,
 - výpočet procenta požárně otevřené plochy skupiny otvorů,
 - kontrolu rozestupů pro samostatné posuzování otvorů podle čl. 10.4.8.1,
 - posouzení střechy podle výjimek v `8.15.4`,
@@ -35,6 +36,7 @@ Na macOS lze pro ne-IT uživatele spustit API dvojklikem na [start_api.command](
 - `GET /health`
 - `GET /schema`
 - `POST /v1/opening-distance`
+- `POST /v1/opening-group`
 - `POST /v1/opening-percentage`
 - `POST /v1/spacing-check`
 - `POST /v1/roof-assessment`
@@ -75,16 +77,34 @@ curl -s http://127.0.0.1:8000/v1/opening-distance \
     { "opening_id": "W1", "width_m": 1.2, "height_m": 1.5 },
     { "opening_id": "D1", "width_m": 1.0, "height_m": 2.1 }
   ],
-  "group": {
-    "group_id": "south_facade_group",
-    "bounding_width_m": 4.5,
-    "bounding_height_m": 2.4
-  },
+  "layout": "horizontal",
+  "gaps_m": [0.5],
   "spacing_checks": [
-    { "gap_m": 2.1, "distance_1_m": 2.3, "distance_2_m": 2.0 }
+    {
+      "openings_edge_distance_m": 2.1,
+      "distance_opening_1_m": 2.3,
+      "distance_opening_2_m": 2.0
+    }
   ]
 }
 ```
+
+## Příklad: skupina otvorů bez ručního dopočtu `p0`
+
+```bash
+curl -s http://127.0.0.1:8000/v1/opening-group \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "openings": [
+      { "id": "O1", "width_m": 1.0, "height_m": 2.0 },
+      { "id": "O2", "width_m": 1.0, "height_m": 2.0 }
+    ],
+    "layout": "horizontal",
+    "gaps_m": [0.5]
+  }'
+```
+
+Stejnou geometrii lze poslat i na `POST /v1/opening-percentage`; endpoint si obalový obdélník spočítá sám. Pro starší integrace dál funguje i varianta s ručně zadaným `bounding_width_m` a `bounding_height_m`.
 
 ## Poznámky k návrhu
 

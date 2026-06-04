@@ -50,6 +50,13 @@ class OpeningInput:
     opening_id: str | None = None
 
 
+@dataclass(frozen=True)
+class GroupGeometryInput:
+    openings: list[dict[str, Any]]
+    layout: str
+    gaps_m: list[float]
+
+
 def _require_number(name: str, value: Any, *, min_value: float | None = None) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise CalculationError(f"'{name}' must be a number.")
@@ -67,6 +74,63 @@ def _normalize_structural_system(value: str) -> str:
         allowed = ", ".join(sorted(set(STRUCTURAL_SYSTEM_ADJUSTMENTS)))
         raise CalculationError(f"Unknown structural_system '{value}'. Allowed values: {allowed}.")
     return key
+
+
+def _normalize_layout(value: Any) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise CalculationError("'layout' must be a non-empty string.")
+    key = value.strip().lower()
+    if key not in {"horizontal", "vertical"}:
+        raise CalculationError("'layout' must be either 'horizontal' or 'vertical'.")
+    return key
+
+
+def _normalize_opening_id(opening: dict[str, Any], index: int) -> str:
+    opening_id = opening.get("opening_id", opening.get("id"))
+    if opening_id is None:
+        return f"opening_{index}"
+    if not isinstance(opening_id, str) or not opening_id.strip():
+        raise CalculationError(f"'openings[{index}].opening_id' must be a non-empty string when provided.")
+    return opening_id.strip()
+
+
+def _normalize_openings(openings: Any) -> tuple[list[dict[str, Any]], float]:
+    if not isinstance(openings, list) or not openings:
+        raise CalculationError("'openings' must contain at least one opening.")
+
+    normalized: list[dict[str, Any]] = []
+    opening_area_total = 0.0
+    for index, opening in enumerate(openings, start=1):
+        if not isinstance(opening, dict):
+            raise CalculationError(f"'openings[{index}]' must be an object.")
+        width = _require_number(f"openings[{index}].width_m", opening.get("width_m"), min_value=0.000001)
+        height = _require_number(f"openings[{index}].height_m", opening.get("height_m"), min_value=0.000001)
+        area = width * height
+        opening_area_total += area
+        normalized.append(
+            {
+                "opening_id": _normalize_opening_id(opening, index),
+                "width_m": width,
+                "height_m": height,
+                "area_m2": round(area, 4),
+            }
+        )
+    return normalized, opening_area_total
+
+
+def _normalize_gaps(gaps_m: Any, *, expected_count: int) -> list[float]:
+    if expected_count == 0:
+        if gaps_m in (None, []):
+            return []
+        raise CalculationError("'gaps_m' must be empty when only one opening is provided.")
+    if not isinstance(gaps_m, list):
+        raise CalculationError("'gaps_m' must be a list.")
+    if len(gaps_m) != expected_count:
+        raise CalculationError(f"'gaps_m' must contain exactly {expected_count} values.")
+    return [
+        _require_number(f"gaps_m[{index}]", gap, min_value=0.0)
+        for index, gap in enumerate(gaps_m, start=1)
+    ]
 
 
 def adjusted_fire_load(pv_kg_m2: float, structural_system: str) -> dict[str, float | str]:
@@ -153,7 +217,7 @@ def calculate_opening_distance(payload: dict[str, Any]) -> dict[str, Any]:
         emissivity=_require_number("emissivity", payload.get("emissivity", 1.0), min_value=0.0),
         falling_parts_risk=bool(payload.get("falling_parts_risk", False)),
         fall_height_m=payload.get("fall_height_m"),
-        opening_id=payload.get("opening_id"),
+        opening_id=payload.get("opening_id", payload.get("id")),
     )
     pv_data = adjusted_fire_load(opening.pv_kg_m2, opening.structural_system)
     temperature = gas_temperature_celsius(float(pv_data["pv_adjusted_kg_m2"]))
@@ -203,36 +267,77 @@ def calculate_opening_distance(payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def calculate_opening_percentage(openings: list[dict[str, Any]], bounding_width_m: float, bounding_height_m: float) -> dict[str, Any]:
-    if not openings:
-        raise CalculationError("'openings' must contain at least one opening.")
-    bounding_width = _require_number("bounding_width_m", bounding_width_m, min_value=0.000001)
-    bounding_height = _require_number("bounding_height_m", bounding_height_m, min_value=0.000001)
-    opening_area_total = 0.0
-    normalized = []
-    for index, opening in enumerate(openings, start=1):
-        width = _require_number(f"openings[{index}].width_m", opening.get("width_m"), min_value=0.000001)
-        height = _require_number(f"openings[{index}].height_m", opening.get("height_m"), min_value=0.000001)
-        area = width * height
-        opening_area_total += area
-        normalized.append(
-            {
-                "opening_id": opening.get("opening_id", f"opening_{index}"),
-                "width_m": width,
-                "height_m": height,
-                "area_m2": round(area, 4),
-            }
-        )
+def calculate_opening_group(payload: dict[str, Any]) -> dict[str, Any]:
+    normalized_openings, opening_area_total = _normalize_openings(payload.get("openings"))
+    geometry = GroupGeometryInput(
+        openings=normalized_openings,
+        layout=_normalize_layout(payload.get("layout")),
+        gaps_m=_normalize_gaps(payload.get("gaps_m"), expected_count=len(normalized_openings) - 1),
+    )
+
+    widths = [opening["width_m"] for opening in geometry.openings]
+    heights = [opening["height_m"] for opening in geometry.openings]
+    if geometry.layout == "horizontal":
+        bounding_width = sum(widths) + sum(geometry.gaps_m)
+        bounding_height = max(heights)
+    else:
+        bounding_width = max(widths)
+        bounding_height = sum(heights) + sum(geometry.gaps_m)
+
     bounding_area = bounding_width * bounding_height
     p0 = (opening_area_total / bounding_area) * 100.0
     return {
-        "openings": normalized,
+        "openings": geometry.openings,
+        "layout": geometry.layout,
+        "gaps_m": geometry.gaps_m,
+        "opening_area_m2": round(opening_area_total, 4),
         "opening_area_total_m2": round(opening_area_total, 4),
+        "bounding_width_m": round(bounding_width, 4),
+        "bounding_height_m": round(bounding_height, 4),
         "bounding_area_m2": round(bounding_area, 4),
-        "bounding_width_m": bounding_width,
-        "bounding_height_m": bounding_height,
+        "p0_percent": round(p0, 4),
         "radiation_percentage": round(p0, 4),
         "can_be_assessed_as_group": p0 >= 40.0,
+        "requires_10481_confirmation": p0 < 40.0,
+        "individual_assessment_prompt_required": p0 < 40.0,
+        "source_reference": {
+            "formula": "FORMULA_OPENING_GROUP_PERCENTAGE",
+            "file": "rules/03_vzorce.yaml",
+        },
+    }
+
+
+def calculate_opening_percentage(
+    openings_or_payload: list[dict[str, Any]] | dict[str, Any],
+    bounding_width_m: float | None = None,
+    bounding_height_m: float | None = None,
+) -> dict[str, Any]:
+    if isinstance(openings_or_payload, dict):
+        payload = openings_or_payload
+        openings = payload.get("openings")
+        if payload.get("layout") is not None or payload.get("gaps_m") is not None:
+            return calculate_opening_group(payload)
+        bounding_width = _require_number("bounding_width_m", payload.get("bounding_width_m"), min_value=0.000001)
+        bounding_height = _require_number("bounding_height_m", payload.get("bounding_height_m"), min_value=0.000001)
+    else:
+        openings = openings_or_payload
+        bounding_width = _require_number("bounding_width_m", bounding_width_m, min_value=0.000001)
+        bounding_height = _require_number("bounding_height_m", bounding_height_m, min_value=0.000001)
+
+    normalized_openings, opening_area_total = _normalize_openings(openings)
+    bounding_area = bounding_width * bounding_height
+    p0 = (opening_area_total / bounding_area) * 100.0
+    return {
+        "openings": normalized_openings,
+        "opening_area_m2": round(opening_area_total, 4),
+        "opening_area_total_m2": round(opening_area_total, 4),
+        "bounding_area_m2": round(bounding_area, 4),
+        "bounding_width_m": round(bounding_width, 4),
+        "bounding_height_m": round(bounding_height, 4),
+        "p0_percent": round(p0, 4),
+        "radiation_percentage": round(p0, 4),
+        "can_be_assessed_as_group": p0 >= 40.0,
+        "requires_10481_confirmation": p0 < 40.0,
         "individual_assessment_prompt_required": p0 < 40.0,
         "source_reference": {
             "formula": "FORMULA_OPENING_PERCENTAGE",
@@ -241,15 +346,45 @@ def calculate_opening_percentage(openings: list[dict[str, Any]], bounding_width_
     }
 
 
-def check_individual_opening_spacing(gap_m: float, distance_1_m: float, distance_2_m: float) -> dict[str, Any]:
-    gap = _require_number("gap_m", gap_m, min_value=0.0)
-    d1 = _require_number("distance_1_m", distance_1_m, min_value=0.0)
-    d2 = _require_number("distance_2_m", distance_2_m, min_value=0.0)
+def check_individual_opening_spacing(
+    gap_or_payload: float | dict[str, Any],
+    distance_1_m: float | None = None,
+    distance_2_m: float | None = None,
+) -> dict[str, Any]:
+    p0_percent = None
+    if isinstance(gap_or_payload, dict):
+        payload = gap_or_payload
+        if payload.get("p0_percent") is not None:
+            p0_percent = _require_number("p0_percent", payload.get("p0_percent"), min_value=0.0)
+        gap = _require_number(
+            "openings_edge_distance_m",
+            payload.get("openings_edge_distance_m", payload.get("gap_m")),
+            min_value=0.0,
+        )
+        d1 = _require_number(
+            "distance_opening_1_m",
+            payload.get("distance_opening_1_m", payload.get("distance_1_m")),
+            min_value=0.0,
+        )
+        d2 = _require_number(
+            "distance_opening_2_m",
+            payload.get("distance_opening_2_m", payload.get("distance_2_m")),
+            min_value=0.0,
+        )
+    else:
+        gap = _require_number("gap_m", gap_or_payload, min_value=0.0)
+        d1 = _require_number("distance_1_m", distance_1_m, min_value=0.0)
+        d2 = _require_number("distance_2_m", distance_2_m, min_value=0.0)
     threshold = 0.6 * (d1 + d2)
     return {
+        "openings_edge_distance_m": gap,
         "gap_m": gap,
+        "distance_opening_1_m": d1,
+        "distance_opening_2_m": d2,
         "required_minimum_gap_m": round(threshold, 3),
+        "assessment_10481_possible": gap > threshold,
         "passes": gap > threshold,
+        "p0_percent": None if p0_percent is None else round(p0_percent, 4),
         "source_reference": {
             "formula": "FORMULA_CSN730802_10_4_8_1_SPACING",
             "file": "rules/03_vzorce.yaml",
@@ -499,7 +634,7 @@ def calculate_full_assessment(payload: dict[str, Any]) -> dict[str, Any]:
 
         for index, opening in enumerate(openings, start=1):
             opening_payload = {
-                "opening_id": opening.get("opening_id", f"opening_{index}"),
+                "opening_id": _normalize_opening_id(opening, index),
                 "width_m": opening.get("width_m"),
                 "height_m": opening.get("height_m"),
                 "pv_kg_m2": pv_kg_m2,
@@ -520,36 +655,63 @@ def calculate_full_assessment(payload: dict[str, Any]) -> dict[str, Any]:
             group_payload.get("bounding_width_m"),
             group_payload.get("bounding_height_m"),
         )
-        opening_distance = calculate_opening_distance(
+        result["group"] = {
+            "geometry": percentage,
+            "requires_10481_confirmation": percentage["requires_10481_confirmation"],
+        }
+        if percentage["requires_10481_confirmation"]:
+            result["requires_10481_confirmation"] = True
+        else:
+            opening_distance = calculate_opening_distance(
+                {
+                    "opening_id": group_payload.get("group_id", "opening_group"),
+                    "width_m": group_payload.get("bounding_width_m"),
+                    "height_m": group_payload.get("bounding_height_m"),
+                    "pv_kg_m2": payload.get("pv_kg_m2"),
+                    "structural_system": payload.get("structural_system", "noncombustible"),
+                    "radiation_percentage": percentage["p0_percent"],
+                    "emissivity": group_payload.get("emissivity", 1.0),
+                    "falling_parts_risk": group_payload.get("falling_parts_risk", False),
+                    "fall_height_m": group_payload.get("fall_height_m"),
+                }
+            )
+            result["group"]["distance"] = opening_distance
+
+    if openings and (payload.get("layout") is not None or payload.get("gaps_m") is not None):
+        geometry = calculate_opening_group(
             {
-                "opening_id": group_payload.get("group_id", "opening_group"),
-                "width_m": group_payload.get("bounding_width_m"),
-                "height_m": group_payload.get("bounding_height_m"),
-                "pv_kg_m2": payload.get("pv_kg_m2"),
-                "structural_system": payload.get("structural_system", "noncombustible"),
-                "radiation_percentage": percentage["radiation_percentage"],
-                "emissivity": group_payload.get("emissivity", 1.0),
-                "falling_parts_risk": group_payload.get("falling_parts_risk", False),
-                "fall_height_m": group_payload.get("fall_height_m"),
+                "openings": openings,
+                "layout": payload.get("layout"),
+                "gaps_m": payload.get("gaps_m"),
             }
         )
         result["group"] = {
-            "percentage": percentage,
-            "distance": opening_distance,
+            "geometry": geometry,
+            "requires_10481_confirmation": geometry["requires_10481_confirmation"],
         }
+        if geometry["requires_10481_confirmation"]:
+            result["requires_10481_confirmation"] = True
+        else:
+            group_distance = calculate_opening_distance(
+                {
+                    "opening_id": payload.get("group_id", "opening_group"),
+                    "width_m": geometry["bounding_width_m"],
+                    "height_m": geometry["bounding_height_m"],
+                    "pv_kg_m2": payload.get("pv_kg_m2"),
+                    "structural_system": payload.get("structural_system", "noncombustible"),
+                    "radiation_percentage": geometry["p0_percent"],
+                    "emissivity": payload.get("emissivity", 1.0),
+                    "falling_parts_risk": payload.get("falling_parts_risk", False),
+                    "fall_height_m": payload.get("fall_height_m"),
+                }
+            )
+            result["group"]["distance"] = group_distance
 
     spacing_checks = payload.get("spacing_checks", [])
     if spacing_checks:
         if not isinstance(spacing_checks, list):
             raise CalculationError("'spacing_checks' must be a list.")
         for item in spacing_checks:
-            result["individual_spacing_checks"].append(
-                check_individual_opening_spacing(
-                    item.get("gap_m"),
-                    item.get("distance_1_m"),
-                    item.get("distance_2_m"),
-                )
-            )
+            result["individual_spacing_checks"].append(check_individual_opening_spacing(item))
 
     return result
-

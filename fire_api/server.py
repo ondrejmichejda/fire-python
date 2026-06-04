@@ -11,6 +11,7 @@ from .engine import (
     assess_roof,
     calculate_full_assessment,
     calculate_opening_distance,
+    calculate_opening_group,
     calculate_opening_percentage,
     check_individual_opening_spacing,
     roof_distance_table_15,
@@ -27,6 +28,9 @@ def _schema() -> dict[str, Any]:
         "endpoints": {
             "GET /health": "Liveness check",
             "GET /schema": "Supported endpoints and payload hints",
+            "POST /v1/opening-group": {
+                "required": ["openings", "layout", "gaps_m"],
+            },
             "POST /v1/opening-distance": {
                 "required": ["width_m", "height_m", "pv_kg_m2"],
                 "optional": [
@@ -39,10 +43,12 @@ def _schema() -> dict[str, Any]:
                 ],
             },
             "POST /v1/opening-percentage": {
-                "required": ["openings", "bounding_width_m", "bounding_height_m"],
+                "required": ["openings"],
+                "optional": ["bounding_width_m", "bounding_height_m", "layout", "gaps_m"],
             },
             "POST /v1/spacing-check": {
-                "required": ["gap_m", "distance_1_m", "distance_2_m"],
+                "required": ["openings_edge_distance_m", "distance_opening_1_m", "distance_opening_2_m"],
+                "optional": ["p0_percent", "gap_m", "distance_1_m", "distance_2_m"],
             },
             "POST /v1/roof-assessment": {
                 "optional": [
@@ -71,24 +77,27 @@ def _schema() -> dict[str, Any]:
                 "required": ["insulation_thickness_mm", "insulation_reaction_class"],
             },
             "POST /v1/full-assessment": {
-                "optional": ["roof", "etics", "openings", "group", "spacing_checks", "pv_kg_m2", "structural_system"],
+                "optional": [
+                    "roof",
+                    "etics",
+                    "openings",
+                    "group",
+                    "layout",
+                    "gaps_m",
+                    "spacing_checks",
+                    "pv_kg_m2",
+                    "structural_system",
+                ],
             },
         },
     }
 
 
 ROUTES: dict[str, RouteHandler] = {
+    "/v1/opening-group": calculate_opening_group,
     "/v1/opening-distance": calculate_opening_distance,
-    "/v1/opening-percentage": lambda payload: calculate_opening_percentage(
-        payload.get("openings"),
-        payload.get("bounding_width_m"),
-        payload.get("bounding_height_m"),
-    ),
-    "/v1/spacing-check": lambda payload: check_individual_opening_spacing(
-        payload.get("gap_m"),
-        payload.get("distance_1_m"),
-        payload.get("distance_2_m"),
-    ),
+    "/v1/opening-percentage": calculate_opening_percentage,
+    "/v1/spacing-check": check_individual_opening_spacing,
     "/v1/roof-assessment": assess_roof,
     "/v1/roof-distance-table15": lambda payload: roof_distance_table_15(
         payload.get("hu_m"),
@@ -154,4 +163,3 @@ def run_server(host: str = "127.0.0.1", port: int = 8000) -> None:
     server = ThreadingHTTPServer((host, port), FireRequestHandler)
     print(f"Fire separation API listening on http://{host}:{port}")
     server.serve_forever()
-
